@@ -1,5 +1,5 @@
 <properties
-   pageTitle="Create and upload a FreeBSD VM image | Microsoft Azure"
+   pageTitle="Create and upload a OpenBSD VM image | Microsoft Azure"
    description="Learn to create and upload a virtual hard disk (VHD) that contains the FreeBSD operating system to create an Azure virtual machine"
    services="virtual-machines-linux"
    documentationCenter=""
@@ -17,9 +17,9 @@
    ms.date="08/29/2016"
    ms.author="kyliel"/>
 
-# Create and upload a FreeBSD VHD to Azure
+# Create and upload a OpenBSD VHD to Azure
 
-This article shows you how to create and upload a virtual hard disk (VHD) that contains the FreeBSD operating system. After you upload it, you can use it as your own image to create a virtual machine (VM) in Azure.
+This article shows you how to create and upload a virtual hard disk (VHD) that contains the OpenBSD operating system. After you upload it, you can use it as your own image to create a virtual machine (VM) in Azure.
 
 [AZURE.INCLUDE [learn-about-deployment-models](../../includes/learn-about-deployment-models-classic-include.md)] For information about uploading a VHD using the Resource Manager model, see [here](virtual-machines-linux-upload-vhd.md).
 
@@ -31,90 +31,72 @@ This article assumes that you have the following items:
 
 - **Azure PowerShell tools**--The Azure PowerShell module must be installed and configured to use your Azure subscription. To download the module, see [Azure downloads](https://azure.microsoft.com/downloads/). A tutorial that describes how install and configure the module is available here. Use the [Azure Downloads](https://azure.microsoft.com/downloads/) cmdlet to upload the VHD.
 
-- **FreeBSD operating system installed in a .vhd file**--A supported   FreeBSD operating system must be installed to a virtual hard disk. Multiple tools exist to create .vhd files. For example, you can use a virtualization solution such as Hyper-V to create the .vhd file and install the operating system. For instructions about how to install and use Hyper-V, see [Install Hyper-V and create a virtual machine](http://technet.microsoft.com/library/hh846766.aspx).
+- **OpenBSD operating system installed in a .vhd file**--A supported   OpenBSD operating system must be installed to a virtual hard disk. Multiple tools exist to create .vhd files. For example, you can use a virtualization solution such as Hyper-V to create the .vhd file and install the operating system. For instructions about how to install and use Hyper-V, see [Install Hyper-V and create a virtual machine](http://technet.microsoft.com/library/hh846766.aspx).
 
 > [AZURE.NOTE] The newer VHDX format is not supported in Azure. You can convert the disk to VHD format by using Hyper-V Manager or the cmdlet [convert-vhd](https://technet.microsoft.com/library/hh848454.aspx). In addition, there is a [tutorial on MSDN about how to use FreeBSD with Hyper-V](http://blogs.msdn.com/b/kylie/archive/2014/12/25/running-freebsd-on-hyper-v.aspx).
 
 This task includes the following five steps.
 
-## Step 1: Prepare the image for upload
+## Step 1: Install OpenBSD and prepare the image for upload
 
-On the virtual machine where you installed the FreeBSD operating system, complete the following procedures:
+On the Hyper-V virtual machine with the .vhd file that was created for OpenBSD, complete the following procedures:
 
-1. Enable DHCP.
+1. Install OpenBSD in from the latest ISO.
 
-		# echo 'ifconfig_hn0="SYNCDHCP"' >> /etc/rc.conf
-		# service netif restart
+    To install OpenBSD from the latest snapshot ISO, get [install60.iso](http://ftp.openbsd.org/pub/OpenBSD/snapshots/amd64/install60.iso)  for the amd64 platform from one of the [OpenBSD mirrors](http://www.openbsd.org/ftp.html). Install in a VM with at least two CPU cores, or the installer will pick the kernel without SMP support.
+    
+    After the booting the ISO, you will see the first installer question:
 
-2. Enable SSH.
+		...
+		root on rd0a swap on rd0b dump on rd0b
+		erase ^?, werase ^W, kill ^U, intr ^C, status ^T
+		
+		Welcome to the OpenBSD/i386 X.X installation program.
+		(I)nstall, (U)pgrade, (A)utoinstall or (S)hell?
 
-    SSH is enabled by default after installation from disc. If it isn't enabled for some reason, or if you use FreeBSD VHD directly, type the following:
+    Choose (I)nstall and follow the instructions to install from CD. Make sure to create a default user (eg. 'azureuser'), to keep root logins disabled, and to enable the serial console.
 
-		# echo 'sshd_enable="YES"' >> /etc/rc.conf
-		# ssh-keygen -t dsa -f /etc/ssh/ssh_host_dsa_key
-		# ssh-keygen -t rsa -f /etc/ssh/ssh_host_rsa_key
-		# service sshd restart
+		Change the default console to com0? [no] yes
+		Available speeds are: 9600 19200 38400 57600 115200.
+		Which speed should com0 use? (or 'done') [9600]
+		
+2. Boot the installed system and enable DHCP.
 
-3. Set up a serial console.
+    The installer does not support the networking interface, but all the Hyper-V drivers for Azure are included in the installed kernel. Enable DHCP for the next boot by creating a [hostname.if](http://man.openbsd.org/hostname.if) file.
 
-		# echo 'console="comconsole vidconsole"' >> /boot/loader.conf
-		# echo 'comconsole_speed="115200"' >> /boot/loader.conf
+		# echo 'dhcp' >> /etc/hostname.hvn0
 
-4. Install sudo.
+3. The Azure Agent is not supported yet.
 
-    The root account is disabled in Azure. This means you need to utilize sudo from an unprivileged user to run commands with elevated privileges.
+    Without the agent, automatic provion of users and keys from Azure is not supported. You have to configure a non-root default user, and either set a password or place your SSH key in the image. Please note that this will be improved as soon as agent-based automatic provision is supported - booting VM instances with a default password or key is not a suitable solution for production.
+    
+    		# cat id_ed25529.pub >> /home/azureuser/.ssh/authorized_keys
 
-		# pkg install sudo
-;
-5. Prerequisites for Azure Agent.
+4. Configure doas.
 
-		# pkg install python27  
-		# pkg install Py27-setuptools27   
-		# ln -s /usr/local/bin/python2.7 /usr/bin/python   
-		# pkg install git
+    The root account should be disabled in Azure. This means you need to utilize doas from an unprivileged user to run commands with elevated privileges, see [doas(5)](http://man.openbsd.org/doas.conf).
 
-6. Install Azure Agent.
+		# vi /etc/doas.conf
 
-    The latest release of the Azure Agent can always be found on [github](https://github.com/Azure/WALinuxAgent/releases). The version 2.0.10 + officially supports FreeBSD 10 & 10.1, and the version 2.1.4 officially supports FreeBSD 10.2 and later releases.
+5. Deprovision the system.
 
-		# git clone https://github.com/Azure/WALinuxAgent.git  
-		# cd WALinuxAgent  
-		# git tag  
-		…
-		WALinuxAgent-2.0.16
-		…
-		v2.1.4
-		v2.1.4.rc0
-		v2.1.4.rc1
+    Deprovision the system to clean it and make it suitable for re-provisioning. The following command also deletes the generated keys that will be re-created on first boot in Azure:
 
-    For 2.0, let's use 2.0.16 as an example:
+    - Remove generated keys
+	
+    		# rm -f /etc/{iked,isakmpd}/{local.pub,private/local.key} \
+    			/etc/ssh/ssh_host_*
 
-		# git checkout WALinuxAgent-2.0.16
-		# python setup.py install  
-		# ln -sf /usr/local/sbin/waagent /usr/sbin/waagent  
+    - Reset entropy files in case the installer put them in the image			
+	
+    		echo -n >/etc/random.seed
+    		echo -n >/var/db/host.random
 
-    For 2.1, let's use 2.1.4 as an example:
+    - Empty log files
 
-		# git checkout v2.1.4
-		# python setup.py install  
-		# ln -sf /usr/local/sbin/waagent /usr/sbin/waagent  
-		# ln -sf /usr/local/sbin/waagent2.0 /usr/sbin/waagent2.0
-
-    >[AZURE.IMPORTANT] After you install Azure Agent, it's a good idea to verify that it's running:
-
-		# waagent -version
-		WALinuxAgent-2.1.4 running on freebsd 10.3
-		Python: 2.7.11
-		# service –e | grep waagent
-		/etc/rc.d/waagent
-		# cat /var/log/waagent.log
-
-7. Deprovision the system.
-
-    Deprovision the system to clean it and make it suitable for re-provisioning. The following command also deletes the last provisioned user account and the associated data:
-
-		# echo "y" |  /usr/local/sbin/waagent -deprovision+user  
-		# echo  'waagent_enable="YES"' >> /etc/rc.conf
+    		for _l in $(find /var/log -type f ! -name '*.gz' -size +0); do
+    			echo -n > ${_l}
+    		done
 
     Now you can shut down your VM.
 
@@ -164,6 +146,8 @@ You need a storage account in Azure to upload a .vhd file so it can be used to c
 Before you can upload a .vhd file, you need to establish a secure connection between your computer and your Azure subscription. You can use the Azure Active Directory (Azure AD) method or the certificate method to do this.
 
 ### Use the Azure AD method to upload a .vhd file
+
+> [AZURE.NOTE] The following steps use example images from the FreeBSD instructions. Just substitute FreeBSD with OpenBSD wherever it is mentioned.
 
 1. Open the Azure PowerShell console.
 
@@ -228,6 +212,6 @@ After you upload the .vhd file, you can add it as an image to the list of custom
 
 	![Custom image](./media/virtual-machines-linux-classic-freebsd-create-upload-vhd/createfreebsdimageinazure.png)
 
-4. After you complete the provisioning, you'll see your FreeBSD VM running in Azure.
+4. After you complete the provisioning, you'll see your OpenBSD VM running in Azure.
 
-	![FreeBSD image in azure](./media/virtual-machines-linux-classic-freebsd-create-upload-vhd/freebsdimageinazure.png)
+	![OpenBSD image in azure](./media/virtual-machines-linux-classic-freebsd-create-upload-vhd/freebsdimageinazure.png)
