@@ -1,6 +1,6 @@
 <properties
    pageTitle="Create and upload a OpenBSD VM image | Microsoft Azure"
-   description="Learn to create and upload a virtual hard disk (VHD) that contains the FreeBSD operating system to create an Azure virtual machine"
+   description="Learn to create and upload a virtual hard disk (VHD) that contains the OpenBSD operating system to create an Azure virtual machine"
    services="virtual-machines-linux"
    documentationCenter=""
    authors="KylieLiang"
@@ -33,7 +33,7 @@ This article assumes that you have the following items:
 
 - **OpenBSD operating system installed in a .vhd file**--A supported   OpenBSD operating system must be installed to a virtual hard disk. Multiple tools exist to create .vhd files. For example, you can use a virtualization solution such as Hyper-V to create the .vhd file and install the operating system. For instructions about how to install and use Hyper-V, see [Install Hyper-V and create a virtual machine](http://technet.microsoft.com/library/hh846766.aspx).
 
-> [AZURE.NOTE] The newer VHDX format is not supported in Azure. You can convert the disk to VHD format by using Hyper-V Manager or the cmdlet [convert-vhd](https://technet.microsoft.com/library/hh848454.aspx). In addition, there is a [tutorial on MSDN about how to use FreeBSD with Hyper-V](http://blogs.msdn.com/b/kylie/archive/2014/12/25/running-freebsd-on-hyper-v.aspx).
+> [AZURE.NOTE] The newer VHDX format is not supported in Azure. You can convert the disk to VHD format by using Hyper-V Manager or the cmdlet [convert-vhd](https://technet.microsoft.com/library/hh848454.aspx).
 
 This task includes the following five steps.
 
